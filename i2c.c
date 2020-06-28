@@ -15,7 +15,7 @@ int i2c_fd;
 void
 i2c_init (void)
 {
-	if ((i2c_fd = open ("/dev/i2c_1", O_RDWR)) < 0) {
+	if ((i2c_fd = open ("/dev/i2c-1", O_RDWR)) < 0) {
 		perror ("i2c open");
 		exit (1);
 	}
