@@ -41,35 +41,47 @@ int MLX90640_I2CRead(uint8_t slaveAddr, uint16_t startAddress, uint16_t nMemAddr
     i2c_fd = open(i2c_device, O_RDWR);
   }
 
-  unsigned char cmd[2] = {(unsigned char)(startAddress >> 8), (unsigned char)(startAddress & 0xFF)};
-  unsigned char buf[1664];
   uint16_t *p = data;
-  struct i2c_msg i2c_messages[2];
-  struct i2c_rdwr_ioctl_data i2c_messageset[1];
+  int togo = nMemAddressRead;
 
-  i2c_messages[0].addr = slaveAddr;
-  i2c_messages[0].flags = 0;
-  i2c_messages[0].len = 2;
-  i2c_messages[0].buf = cmd;
+  while (togo > 0) {
+    int thistime = togo;
+    if (thistime > 16)
+      thistime = 16;
 
-  i2c_messages[1].addr = slaveAddr;
-  i2c_messages[1].flags = I2C_M_RD | I2C_M_NOSTART;
-  i2c_messages[1].len = nMemAddressRead * 2;
-  i2c_messages[1].buf = buf;
+    unsigned char cmd[2] = {(unsigned char)(startAddress >> 8), 
+			    (unsigned char)(startAddress & 0xFF)};
+    unsigned char buf[1664];
+    struct i2c_msg i2c_messages[2];
+    struct i2c_rdwr_ioctl_data i2c_messageset[1];
 
-  i2c_messageset[0].msgs = i2c_messages;
-  i2c_messageset[0].nmsgs = 2;
+    i2c_messages[0].addr = slaveAddr;
+    i2c_messages[0].flags = 0;
+    i2c_messages[0].len = 2;
+    i2c_messages[0].buf = cmd;
 
-  memset(buf, 0, nMemAddressRead * 2);
+    i2c_messages[1].addr = slaveAddr;
+    i2c_messages[1].flags = I2C_M_RD | I2C_M_NOSTART;
+    i2c_messages[1].len = thistime * 2;
+    i2c_messages[1].buf = buf;
 
-  if (ioctl(i2c_fd, I2C_RDWR, &i2c_messageset) < 0) {
-    printf("I2C Read Error!\n");
-    return -1;
-  }
+    i2c_messageset[0].msgs = i2c_messages;
+    i2c_messageset[0].nmsgs = 2;
 
-  for(int count = 0; count < nMemAddressRead; count++){
-    int i = count << 1;
-    *p++ = ((uint16_t)buf[i] << 8) | buf[i+1];
+    memset(buf, 0, thistime * 2);
+
+    if (ioctl(i2c_fd, I2C_RDWR, &i2c_messageset) < 0) {
+      printf("I2C Read Error!\n");
+      return -1;
+    }
+
+    for(int count = 0; count < thistime; count++){
+      int i = count << 1;
+      *p++ = ((uint16_t)buf[i] << 8) | buf[i+1];
+    }
+
+    togo -= thistime;
+    startAddress += thistime;
   }
 
   return 0;
