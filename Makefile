@@ -3,7 +3,7 @@ CFLAGS = -g -Wall -I.
 
 LIBS = -li2c -lm
 
-OBJS = ir.o i2c.o i2c-glue.o MLX90640_API.o 
+OBJS = ir.o MLX90640_API.o MLX90640_LINUX_I2C_Driver.o
 
 ir: $(OBJS)
 	$(CC) $(CFLAGS) -o ir $(OBJS) $(LIBS)
