@@ -45,7 +45,7 @@ net_init (void)
 	memset (&xmit_addr, 0, sizeof xmit_addr);
 	xmit_addr.sin_family = AF_INET;
 	inet_aton ("224.0.0.1", &xmit_addr.sin_addr);
-	xmit_addr.sin_port = 28318;
+	xmit_addr.sin_port = htons (15318);
 }
 
 void
@@ -53,7 +53,7 @@ xmit (float *arr, int width, int height)
 {
 	union {
 		struct hdr hdr;
-		unsigned char xbuf[1024];
+		unsigned char xbuf[1400];
 	} u;
 
 	int max_in_pkt = (sizeof u.xbuf - sizeof u.hdr) / 4;
