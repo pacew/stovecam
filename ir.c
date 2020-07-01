@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <memory.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
@@ -18,6 +22,78 @@
 
 #define BLOCK "\u2588\u2588"
 
+#define IRMAGIC 0x20200630
+
+struct hdr {
+	uint32_t magic;
+	uint16_t width;
+	uint16_t height;
+	uint16_t start_row;
+	uint16_t start_col;
+	uint16_t npix;
+	float data[0];
+};
+
+int udp_sock;
+struct sockaddr_in xmit_addr;
+
+void
+net_init (void)
+{
+	udp_sock = socket (AF_INET, SOCK_DGRAM, 0);
+
+	memset (&xmit_addr, 0, sizeof xmit_addr);
+	xmit_addr.sin_family = AF_INET;
+	inet_aton ("224.0.0.1", &xmit_addr.sin_addr);
+	xmit_addr.sin_port = 28318;
+}
+
+void
+xmit (float *arr, int width, int height)
+{
+	union {
+		struct hdr hdr;
+		unsigned char xbuf[1024];
+	} u;
+
+	int max_in_pkt = (sizeof u.xbuf - sizeof u.hdr) / 4;
+
+	int in_idx = 0;
+	int togo = width * height;
+
+	int row = 0;
+	int col = 0;
+	while (togo > 0) {
+		int thistime = togo;
+		if (thistime > max_in_pkt)
+			thistime = max_in_pkt;
+
+		u.hdr.magic = htonl (IRMAGIC);
+		u.hdr.width = htons (width);
+		u.hdr.height = htons (height);
+		u.hdr.start_row = htons (row);
+		u.hdr.start_col = htons (col);
+		u.hdr.npix = htons (thistime);
+		for (int i = 0; i < thistime; i++) {
+			u.hdr.data[i] = arr[in_idx];
+			in_idx++;
+			col++;
+			if (col >= width) {
+				col = 0;
+				height++;
+			}
+		}
+
+		int n = sizeof u.hdr + thistime * 4;
+		sendto (udp_sock, u.xbuf, n, 0,
+			(struct sockaddr *)&xmit_addr, sizeof xmit_addr);
+
+		togo -= thistime;
+	}
+}
+
+
+
 void
 putblock (char *color)
 {
@@ -28,6 +104,8 @@ int
 main (int argc, char **argv)
 {
 	static uint16_t eeMLX90640[832];
+
+	net_init ();
 
 	MLX90640_SetRefreshRate(MLX_I2C_ADDR, 0b010);
 	MLX90640_SetChessMode(MLX_I2C_ADDR);
@@ -87,6 +165,16 @@ main (int argc, char **argv)
 			printf ("\n");
 		}
 		printf("\x1b[33A");
+
+				
+		float flat[32 * 24];
+		int idx = 0;
+		for(int x = 0; x < 32; x++){
+			for(int y = 0; y < 24; y++){
+				flat[idx++] = mlx90640To[32 * (23-y) + x];
+			}
+		}
+		xmit (flat, 32, 24);
 	}
 
 	return (0);
