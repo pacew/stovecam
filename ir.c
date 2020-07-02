@@ -80,7 +80,7 @@ xmit (float *arr, int width, int height)
 			col++;
 			if (col >= width) {
 				col = 0;
-				height++;
+				row++;
 			}
 		}
 
