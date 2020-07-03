@@ -116,7 +116,7 @@ main (int argc, char **argv)
 	static uint16_t eeMLX90640[832];
 	int c;
 
-	while ((c = getopt (argc, argv, "")) != EOF) {
+	while ((c = getopt (argc, argv, "q")) != EOF) {
 		switch (c) {
 		case 'q':
 			quiet = 1;
