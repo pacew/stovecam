@@ -195,6 +195,8 @@ main (int argc, char **argv)
 			}
 		}
 		xmit (flat, 32, 24);
+
+		usleep (100 * 1000);
 	}
 
 	return (0);
