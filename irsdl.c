@@ -34,23 +34,20 @@ int sock;
 #define IR_HEIGHT 24
 
 float temps[IR_WIDTH * IR_HEIGHT];
+float rtemps[IR_WIDTH * IR_HEIGHT];
 
 void
-dump_ir (void)
+orient (void)
 {
-	int row, col;
-
-	printf ("\033[H");
-	for (row = 0; row < IR_HEIGHT; row++) {
-		for (col = 0; col < IR_WIDTH; col++) {
-			float degc = temps[row * IR_WIDTH + col];
-			float degf = degc * 9 / 5 + 32;
-
-			printf ("%3.0f ", degf);
+	for (int row = 0; row < IR_HEIGHT; row++) {
+		for (int col = 0; col < IR_WIDTH; col++) {
+			int to = row * IR_WIDTH + col;
+			int from_row = IR_HEIGHT - row - 1;
+			int from_col = IR_WIDTH - col - 1;
+			int from = from_row * IR_WIDTH + from_col;
+			rtemps[to] = temps[from];
 		}
-		printf ("\033[K\n");
 	}
-	printf ("\033[J\n");
 }
 
 
@@ -177,7 +174,8 @@ hsvtorgb (double h, double s, double v, double *rp, double *gp, double *bp)
 
 /* linear scale */
 float
-lscale_clamp (float val, float from_left, float from_right, float to_left, float to_right)
+lscale_clamp (float val, float from_left, float from_right,
+	      float to_left, float to_right)
 {
         if (from_left == from_right)
                 return (to_right);
@@ -202,7 +200,8 @@ lscale_clamp (float val, float from_left, float from_right, float to_left, float
 }
 
 float
-lscale (float val, float from_left, float from_right, float to_left, float to_right)
+lscale (float val, float from_left, float from_right, 
+	float to_left, float to_right)
 {
         if (from_left == from_right)
                 return (to_right);
@@ -217,6 +216,7 @@ void
 redraw (void)
 {
 	ir_step ();
+	orient ();
 	
 	if (surface->w != SCREEN_WIDTH
 	    || surface->h != SCREEN_HEIGHT
@@ -226,9 +226,9 @@ redraw (void)
 		exit (1);
 	}
 
+	double h, s, v, r, g, b;
 	int ir, ig, ib;
 
-	printf ("\033[H");
 
 	for (int ir_row = 0; ir_row < IR_HEIGHT; ir_row++) {
 		for (int rm = 0; rm < PIXEL_MULT; rm++) {
@@ -236,26 +236,23 @@ redraw (void)
 			int off = row * surface->pitch;
 			uint32_t *outp = (uint32_t *)(surface->pixels + off);
 			for (int ir_col = 0; ir_col < IR_WIDTH; ir_col++) {
-				double t = temps[ir_row * IR_WIDTH + ir_col];
-				if (rm == 0) {
-					if (t >= 30)
-						printf ("** ");
-					else
-						printf ("%2.0f ", t);
-				}
-				ir = lscale_clamp (t, 25, 30, 100, 255);
-				ig = ir;
-				ib = ir;
+				double t = rtemps[ir_row * IR_WIDTH + ir_col];
+
+				h = lscale_clamp (t, 20, 200, 180, 360);
+				s = 1;
+				v = 1;
+				hsvtorgb (h, s, v, &r, &g, &b);
+				ir = lscale_clamp (r, 0, 1, 0, 255);
+				ig = lscale_clamp (g, 0, 1, 0, 255);
+				ib = lscale_clamp (b, 0, 1, 0, 255);
 
 				for (int cm = 0; cm < PIXEL_MULT; cm++) {
 					*outp++ = (ir << 16) | (ig << 8) | ib;
 				}
 			}
 		}
-		printf ("\033[K\n");
 	}
 
-	printf ("\033[J");
 	fflush(stdout);
 	SDL_UpdateWindowSurface(window);
 }
