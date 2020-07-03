@@ -1,5 +1,5 @@
 *~
 *.o
-ir
-irtxt
-irsdl
+stovecam-sender
+stovecam-sdl
+stovecam-txt

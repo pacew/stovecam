@@ -7,7 +7,6 @@
 
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
-#include "i2c.h"
 
 #define MLX_I2C_ADDR (0x33)
 

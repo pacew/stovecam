@@ -1,20 +1,19 @@
 CPPFLAGS = -g -Wall -I.
 CFLAGS = -g -Wall -I.
 
-LIBS = -li2c -lm
+all: stovecam-sdl
 
-OBJS = ir.o MLX90640_API.o MLX90640_LINUX_I2C_Driver.o
+STOVECAM_SENDER_OBJS = stovecam-sender.o MLX90640_API.o \
+	MLX90640_LINUX_I2C_Driver.o
+stovecam-sender: $(STOVECAM_SENDER_OBJS)
+	$(CC) $(CFLAGS) -o stovecam-sender $(STOVECAM_SENDER_OBJS) -li2c -lm
 
-all: ir irtxt
+stovecam-sdl: stovecam-sdl.o
+	$(CC) $(CFLAGS) -o stovecam-sdl stovecam-sdl.o -lSDL2 -lm
 
-irsdl: irsdl.o
-	$(CC) $(CFLAGS) -o irsdl irsdl.o -lSDL2 -lm
-
-ir: $(OBJS)
-	$(CC) $(CFLAGS) -o ir $(OBJS) $(LIBS)
-
-irtxt: irtxt.o
-	$(CC) $(CFLAGS) -o irtxt irtxt.o
+stovecam-txt: stovecam-txt.o
+	$(CC) $(CFLAGS) -o stovecam-txt stovecam-txt.o
 
 clean:
-	rm -f *.o ir
+	rm -f *.o stovecam-sender stovecam-sdl stovecam-txt
+
