@@ -130,16 +130,13 @@ main (int argc, char **argv)
 
 	MLX90640_SetRefreshRate(MLX_I2C_ADDR, 0b010);
 	MLX90640_SetChessMode(MLX_I2C_ADDR);
-	printf("Configured...\n");
 
 	paramsMLX90640 mlx90640;
 	MLX90640_DumpEE(MLX_I2C_ADDR, eeMLX90640);
 	MLX90640_ExtractParameters(eeMLX90640, &mlx90640);
 
-	int refresh = MLX90640_GetRefreshRate(MLX_I2C_ADDR);
+	// int refresh = MLX90640_GetRefreshRate(MLX_I2C_ADDR);
     
-	printf ("refresh %d\n", refresh);
-
 	int subpage;
 	static float mlx90640To[768];
 	uint16_t frame[834];
