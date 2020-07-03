@@ -1,7 +1,7 @@
 CPPFLAGS = -g -Wall -I.
 CFLAGS = -g -Wall -I.
 
-all: stovecam-sdl
+all: stovecam-sdl stovecam-txt
 
 STOVECAM_SENDER_OBJS = stovecam-sender.o MLX90640_API.o \
 	MLX90640_LINUX_I2C_Driver.o
@@ -13,6 +13,10 @@ stovecam-sdl: stovecam-sdl.o
 
 stovecam-txt: stovecam-txt.o
 	$(CC) $(CFLAGS) -o stovecam-txt stovecam-txt.o
+
+install-service: stovecam-sender stovecam.service
+	sudo cp stovecam.service /etc/systemd/system/
+	sudo systemctl daemon-reload
 
 clean:
 	rm -f *.o stovecam-sender stovecam-sdl stovecam-txt
