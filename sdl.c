@@ -4,6 +4,7 @@
 #include <memory.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -13,6 +14,17 @@
 
 #include "stovecam.h"
 
+#define IR_WIDTH 32
+#define IR_HEIGHT 24
+
+#define PIXEL_MULT 20
+#define GRAPH_HEIGHT 200
+#define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
+#define SCREEN_HEIGHT ((IR_HEIGHT * PIXEL_MULT) + GRAPH_HEIGHT)
+
+double temp_hist[SCREEN_WIDTH];
+
+
 double
 ctof (double c)
 {
@@ -21,15 +33,10 @@ ctof (double c)
 
 
 int cur_pix_x, cur_pix_y;
-double cur_temp;
 
 SDL_Window *window;
 SDL_Surface *surface;
 
-#define PIXEL_MULT 32
-
-#define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
-#define SCREEN_HEIGHT (IR_HEIGHT * PIXEL_MULT)
 
 void
 usage (void)
@@ -52,11 +59,8 @@ int sock;
 
 #define IRMAGIC 0x20200630
 
-#define IR_WIDTH 32
-#define IR_HEIGHT 24
-
+float raw_temps[IR_WIDTH * IR_HEIGHT];
 float temps[IR_WIDTH * IR_HEIGHT];
-float rtemps[IR_WIDTH * IR_HEIGHT];
 
 void
 orient (void)
@@ -67,7 +71,7 @@ orient (void)
 			int from_row = IR_HEIGHT - row - 1;
 			int from_col = IR_WIDTH - col - 1;
 			int from = from_row * IR_WIDTH + from_col;
-			rtemps[to] = temps[from];
+			temps[to] = raw_temps[from];
 		}
 	}
 }
@@ -154,7 +158,7 @@ ir_step (void)
 
 		for (int pnum = 0; pnum < npix; pnum++) {
 			float pix = u.hdr.data[pnum];
-			temps[row * IR_WIDTH + (IR_WIDTH - col - 1)] = pix;
+			raw_temps[row * IR_WIDTH + (IR_WIDTH - col - 1)] = pix;
 			col++;
 			if (col >= IR_WIDTH) {
 				col = 0;
@@ -251,8 +255,9 @@ lscale (float val, float from_left, float from_right,
 
 char *fname = "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf";
 
+
 TTF_Font *font;
-SDL_Color textColor = { 255, 255, 255 };
+SDL_Color textColor = { 0, 0, 0 };
 
 void
 text_setup (void)
@@ -269,14 +274,11 @@ text_setup (void)
 }
 
 void
-put_text (void)
+put_text (int x, int y, char *buf)
 {
 	SDL_Surface *message;
-	char buf[100];
 	SDL_Rect pos;
 	
-	sprintf (buf, "%8.1f", ctof (cur_temp));
-
 	if ((message = TTF_RenderText_Solid(font, 
 					    buf,
 					    textColor)) == NULL) {
@@ -284,14 +286,122 @@ put_text (void)
 		exit (1);
 	}
 
-	pos.x = 10;
-	pos.y = 10;
-	pos.w = 0;
-	pos.h = 0;
+	memset (&pos, 0, sizeof pos);
+	pos.x = x;
+	pos.y = y;
 
 	SDL_BlitSurface (message, NULL, surface, &pos);
 	SDL_FreeSurface (message);
 
+}
+
+double min_temp, max_temp;
+
+void
+find_min_max (void)
+{
+	min_temp = temps[0];
+	max_temp = temps[0];
+	for (int i = 0; i < IR_WIDTH * IR_HEIGHT; i++) {
+		if (temps[i] < min_temp)
+			min_temp = temps[i];
+		if (temps[i] > max_temp)
+			max_temp = temps[i];
+	}
+}
+
+int
+temp_color (double t)
+{
+	double h = lscale_clamp (t,
+				 min_temp, max_temp, 
+				 150, 360);
+	double s = .9;
+	double v = 1;
+	double r, g, b;
+	int ir, ig, ib;
+	hsvtorgb (h, s, v, &r, &g, &b);
+	ir = lscale_clamp (r, 0, 1, 0, 255);
+	ig = lscale_clamp (g, 0, 1, 0, 255);
+	ib = lscale_clamp (b, 0, 1, 0, 255);
+
+	return ((ir << 16) | (ig << 8) | ib);
+}
+
+void
+put_scale (void)
+{
+	int img_height;
+
+	img_height = IR_HEIGHT * PIXEL_MULT;
+	
+	for (int y = 0; y < img_height; y++) {
+		double t = lscale (y, 0, img_height, max_temp, min_temp);
+		int c = temp_color (t);
+
+		uint32_t *outp = (uint32_t *)(surface->pixels 
+					      + y * surface->pitch);
+
+		for (int x = 0; x < PIXEL_MULT; x++) {
+			*outp++ = c;
+		}
+	}
+
+	
+	char buf[100];
+	sprintf (buf, "%.0f", ctof(max_temp));
+	put_text (50, 5, buf);
+	sprintf (buf, "%.0f", ctof(min_temp));
+	put_text (50, img_height - 40, buf);
+
+	if (0 <= cur_pix_x && cur_pix_x < IR_WIDTH
+	    && 0 <= cur_pix_y && cur_pix_y < IR_HEIGHT) {
+		double t = temps[cur_pix_y * IR_WIDTH + cur_pix_x];
+		sprintf (buf, "%.2f", ctof (t));
+		put_text (SCREEN_WIDTH - 150, img_height - 40, buf);
+	}
+}
+
+void
+put_graph (void)
+{
+	int graf_start_row = IR_HEIGHT * PIXEL_MULT;
+	
+	for (int y = graf_start_row; y < SCREEN_HEIGHT; y++) {
+		uint32_t *outp = (uint32_t *)(surface->pixels 
+					      + y * surface->pitch);
+		for (int x = 0; x < SCREEN_WIDTH; x++) {
+			*outp++ = 0;
+		}
+	}
+
+	for (int x = 0; x < SCREEN_WIDTH; x++) {
+		double ftemp = ctof (temp_hist[x]);
+
+		int y = lscale_clamp (ftemp, 100, 600, 
+				      SCREEN_HEIGHT - 1, graf_start_row);
+		
+		uint32_t *outp = (uint32_t *)(surface->pixels 
+					      + y * surface->pitch);
+		outp[x] = 0xffffff;
+	}
+}
+
+
+
+void
+put_temp_block (int ir_row, int ir_col, int color)
+{
+	int y = ir_row * PIXEL_MULT;
+	int x = ir_col * PIXEL_MULT;
+
+	for (int r = 0; r < PIXEL_MULT; r++) {
+		uint32_t *outp = (uint32_t *)(surface->pixels 
+					      + (y+r) * surface->pitch);
+		outp += x;
+		for (int c = 0; c < PIXEL_MULT; c++)
+			*outp++ = color;
+	}
 }
 
 
@@ -309,34 +419,19 @@ redraw (void)
 		exit (1);
 	}
 
-	double h, s, v, r, g, b;
-	int ir, ig, ib;
-
+	find_min_max ();
 
 	for (int ir_row = 0; ir_row < IR_HEIGHT; ir_row++) {
-		for (int rm = 0; rm < PIXEL_MULT; rm++) {
-			int row = ir_row * PIXEL_MULT + rm;
-			int off = row * surface->pitch;
-			uint32_t *outp = (uint32_t *)(surface->pixels + off);
-			for (int ir_col = 0; ir_col < IR_WIDTH; ir_col++) {
-				double t = rtemps[ir_row * IR_WIDTH + ir_col];
+		for (int ir_col = 0; ir_col < IR_WIDTH; ir_col++) {
+			double t = temps[ir_row * IR_WIDTH + ir_col];
 
-				h = lscale_clamp (t, 20, 200, 180, 360);
-				s = 1;
-				v = 1;
-				hsvtorgb (h, s, v, &r, &g, &b);
-				ir = lscale_clamp (r, 0, 1, 0, 255);
-				ig = lscale_clamp (g, 0, 1, 0, 255);
-				ib = lscale_clamp (b, 0, 1, 0, 255);
-
-				for (int cm = 0; cm < PIXEL_MULT; cm++) {
-					*outp++ = (ir << 16) | (ig << 8) | ib;
-				}
-			}
+			int c = temp_color (t);
+			put_temp_block (ir_row, ir_col, c);
 		}
 	}
 
-	put_text ();
+	put_scale ();
+	put_graph ();
 
 	SDL_UpdateWindowSurface(window);
 }
@@ -352,11 +447,6 @@ do_motion (int x, int y)
 {
 	cur_pix_x = x / PIXEL_MULT;
 	cur_pix_y = y / PIXEL_MULT;
-
-	if (0 <= cur_pix_x && cur_pix_x < IR_WIDTH
-	    && 0 <= cur_pix_y && cur_pix_y < IR_HEIGHT) {
-		cur_temp = rtemps[cur_pix_y * IR_WIDTH + cur_pix_x];
-	}
 }
 
 void
@@ -401,6 +491,41 @@ sdl_step (void)
 	SDL_Delay (10);
 }
 
+double
+get_secs (void)
+{
+	struct timeval tv;
+	gettimeofday (&tv, NULL);
+	return (tv.tv_sec + tv.tv_usec / 1e6);
+}
+
+void
+data_step (void)
+{
+	static double last;
+	double now;
+
+	now = get_secs ();
+	if (last == 0) {
+		last = now;
+		return;
+	}
+
+	double dt = now - last;
+	if (dt < .1)
+		return;
+	last = now;
+
+	for (int i = 1; i < SCREEN_WIDTH; i++)
+		temp_hist[i-1] = temp_hist[i];
+
+	find_min_max ();
+
+	temp_hist[SCREEN_WIDTH - 1] = max_temp;
+
+}
+
+
 void
 sdl_init (void)
 {
@@ -440,6 +565,7 @@ main (int argc, char **argv)
 
 	while (1) {
 		sdl_step ();
+		data_step ();
 	}
 }
 
