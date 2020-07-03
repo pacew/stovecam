@@ -170,7 +170,7 @@ main (int argc, char **argv)
 		int idx = 0;
 		for(int x = 0; x < 32; x++){
 			for(int y = 0; y < 24; y++){
-				flat[idx++] = mlx90640To[32 * y + x];
+				flat[idx++] = mlx90640To[x * 24 + y];
 			}
 		}
 		xmit (flat, 32, 24);
