@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <memory.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -99,10 +101,30 @@ putblock (char *color)
 	printf("%s%s%s", color, BLOCK, ANSI_COLOR_RESET);
 }
 
+int quiet;
+
+void
+usage (void)
+{
+	fprintf (stderr, "usage: stovecam-sender [-q]\n");
+	exit (1);
+}
+
 int
 main (int argc, char **argv)
 {
 	static uint16_t eeMLX90640[832];
+	int c;
+
+	while ((c = getopt (argc, argv, "")) != EOF) {
+		switch (c) {
+		case 'q':
+			quiet = 1;
+			break;
+		default:
+			usage ();
+		}
+	}
 
 	net_init ();
 
@@ -138,33 +160,33 @@ main (int argc, char **argv)
 		MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, 
 					     mlx90640To, 1, &mlx90640);
 
-		printf("Subpage: %d\n", subpage);
-		//MLX90640_SetSubPage(MLX_I2C_ADDR,!subpage);
+		if (! quiet) {
+			printf("Subpage: %d\n", subpage);
 
-		for(int x = 0; x < 32; x++){
-			for(int y = 0; y < 24; y++){
-				float val = mlx90640To[32 * (23-y) + x];
-				if(val > 99.99) val = 99.99;
-				if(val > 32.0){
-					putblock (ANSI_COLOR_MAGENTA);
-				} else if(val > 29.0){
-					putblock (ANSI_COLOR_RED);
-				} else if (val > 26.0){
-					putblock (ANSI_COLOR_YELLOW);
-				} else if ( val > 20.0 ){
-					putblock (ANSI_COLOR_NONE);
-				} else if (val > 17.0) {
-					putblock (ANSI_COLOR_GREEN);
-				} else if (val > 10.0) {
-					putblock (ANSI_COLOR_CYAN);
-				} else {
-					putblock (ANSI_COLOR_BLUE);
+			for(int x = 0; x < 32; x++){
+				for(int y = 0; y < 24; y++){
+					float val = mlx90640To[32 * (23-y) + x];
+					if(val > 99.99) val = 99.99;
+					if(val > 32.0){
+						putblock (ANSI_COLOR_MAGENTA);
+					} else if(val > 29.0){
+						putblock (ANSI_COLOR_RED);
+					} else if (val > 26.0){
+						putblock (ANSI_COLOR_YELLOW);
+					} else if ( val > 20.0 ){
+						putblock (ANSI_COLOR_NONE);
+					} else if (val > 17.0) {
+						putblock (ANSI_COLOR_GREEN);
+					} else if (val > 10.0) {
+						putblock (ANSI_COLOR_CYAN);
+					} else {
+						putblock (ANSI_COLOR_BLUE);
+					}
 				}
+				printf ("\n");
 			}
-			printf ("\n");
+			printf("\x1b[33A");
 		}
-		printf("\x1b[33A");
-
 				
 		float flat[32 * 24];
 		int idx = 0;
