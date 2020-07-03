@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "stovecam.h"
+
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
 
@@ -45,8 +47,8 @@ net_init (void)
 
 	memset (&xmit_addr, 0, sizeof xmit_addr);
 	xmit_addr.sin_family = AF_INET;
-	inet_aton ("224.0.0.1", &xmit_addr.sin_addr);
-	xmit_addr.sin_port = htons (15318);
+	inet_aton (STOVECAM_MADDR, &xmit_addr.sin_addr);
+	xmit_addr.sin_port = htons (STOVECAM_PORT);
 }
 
 void

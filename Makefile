@@ -16,6 +16,7 @@ stovecam-txt: stovecam-txt.o
 
 install-service: stovecam-sender stovecam.service
 	sudo cp stovecam.service /etc/systemd/system/
+	sudo systemctl enable stovecam
 	sudo systemctl daemon-reload
 
 clean:

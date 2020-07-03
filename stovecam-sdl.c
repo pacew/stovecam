@@ -6,8 +6,11 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <SDL2/SDL.h>
+
+#include "stovecam.h"
 
 void
 usage (void)
@@ -58,9 +61,31 @@ ir_setup (void)
 	
 	sock = socket (AF_INET, SOCK_DGRAM, 0);
 
+	int val;
+	val = 1;
+	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val) < 0) {
+		perror ("reuseaddr");
+		exit(1);
+	}
+
+
+
 	memset (&addr, 0, sizeof addr);
-	addr.sin_port = htons (15318);
-	bind (sock, (struct sockaddr *)&addr, sizeof addr);;
+	addr.sin_port = htons (STOVECAM_PORT);
+	if (bind (sock, (struct sockaddr *)&addr, sizeof addr) < 0) {
+		perror ("bind");
+		exit (1);
+	}
+
+	struct ip_mreq mreq;
+	memset (&mreq, 0, sizeof mreq);
+	mreq.imr_multiaddr.s_addr = inet_addr (STOVECAM_MADDR);                 
+        if (setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,                    
+                        &mreq, sizeof mreq) < 0) {                              
+                perror ("IP_ADD_MEMBERSHIP");                                   
+                exit (1);                                                       
+        }
+
 	fcntl (sock, F_SETFL, O_NONBLOCK);
 	
 
@@ -126,7 +151,7 @@ ir_step (void)
 SDL_Window *window;
 SDL_Surface *surface;
 
-#define PIXEL_MULT 20
+#define PIXEL_MULT 24
 
 #define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
 #define SCREEN_HEIGHT (IR_HEIGHT * PIXEL_MULT)
