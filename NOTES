@@ -1,4 +1,4 @@
-apt-get install libsdl-pango-dev
+apt-get install libsdl2-ttf-dev
 
 
 ~/elixir_mlx90640/src/

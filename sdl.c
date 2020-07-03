@@ -9,9 +9,27 @@
 #include <arpa/inet.h>
 
 #include <SDL2/SDL.h>
-#include <SDL_Pango.h>
+#include <SDL2/SDL_ttf.h>
 
 #include "stovecam.h"
+
+double
+ctof (double c)
+{
+	return (c * 9 / 5 + 32);
+}
+
+
+int cur_pix_x, cur_pix_y;
+double cur_temp;
+
+SDL_Window *window;
+SDL_Surface *surface;
+
+#define PIXEL_MULT 32
+
+#define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
+#define SCREEN_HEIGHT (IR_HEIGHT * PIXEL_MULT)
 
 void
 usage (void)
@@ -149,13 +167,6 @@ ir_step (void)
 
 
 
-SDL_Window *window;
-SDL_Surface *surface;
-
-#define PIXEL_MULT 32
-
-#define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
-#define SCREEN_HEIGHT (IR_HEIGHT * PIXEL_MULT)
 
 /*
  * 0 <= h <= 360
@@ -238,6 +249,52 @@ lscale (float val, float from_left, float from_right,
                 + to_left);
 }
 
+char *fname = "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf";
+
+TTF_Font *font;
+SDL_Color textColor = { 255, 255, 255 };
+
+void
+text_setup (void)
+{
+	if (TTF_Init () < 0) {
+		printf ("TTF_Init error\n");
+		exit (1);
+	}
+
+	if ((font = TTF_OpenFont (fname, 30)) == NULL) {
+		printf ("can't open font %s\n", fname);
+		exit (1);
+	}
+}
+
+void
+put_text (void)
+{
+	SDL_Surface *message;
+	char buf[100];
+	SDL_Rect pos;
+	
+	sprintf (buf, "%8.1f", ctof (cur_temp));
+
+	if ((message = TTF_RenderText_Solid(font, 
+					    buf,
+					    textColor)) == NULL) {
+		printf ("render error\n");
+		exit (1);
+	}
+
+	pos.x = 10;
+	pos.y = 10;
+	pos.w = 0;
+	pos.h = 0;
+
+	SDL_BlitSurface (message, NULL, surface, &pos);
+	SDL_FreeSurface (message);
+
+}
+
+
 void
 redraw (void)
 {
@@ -279,13 +336,27 @@ redraw (void)
 		}
 	}
 
-	fflush(stdout);
+	put_text ();
+
 	SDL_UpdateWindowSurface(window);
 }
 
 void
 do_mouse (int x, int y, int state)
 {
+}
+
+
+void
+do_motion (int x, int y)
+{
+	cur_pix_x = x / PIXEL_MULT;
+	cur_pix_y = y / PIXEL_MULT;
+
+	if (0 <= cur_pix_x && cur_pix_x < IR_WIDTH
+	    && 0 <= cur_pix_y && cur_pix_y < IR_HEIGHT) {
+		cur_temp = rtemps[cur_pix_y * IR_WIDTH + cur_pix_x];
+	}
 }
 
 void
@@ -319,6 +390,9 @@ sdl_step (void)
 			do_mouse (e.button.x, e.button.y, 0);
 			break;
 			
+		case SDL_MOUSEMOTION:
+			do_motion (e.motion.x, e.motion.y);
+			break;
 		}
 	}
 	
@@ -362,6 +436,7 @@ main (int argc, char **argv)
 
 	sdl_init ();
 	ir_setup ();
+	text_setup ();
 
 	while (1) {
 		sdl_step ();

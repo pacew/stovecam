@@ -1,5 +1,5 @@
-CFLAGS = -g -Wall -I. `pkg-config --cflags sdl2 SDL_Pango`
-LIBS = `pkg-config --libs sdl2 SDL_Pango`
+CFLAGS = -g -Wall -I. `pkg-config --cflags sdl2 SDL2_ttf`
+LIBS = `pkg-config --libs sdl2 SDL2_ttf`
 
 all: sdl
 
