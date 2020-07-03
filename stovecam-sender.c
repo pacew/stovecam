@@ -7,7 +7,6 @@
 
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
-#include "i2c.h"
 
 #define MLX_I2C_ADDR (0x33)
 
@@ -80,7 +79,7 @@ xmit (float *arr, int width, int height)
 			col++;
 			if (col >= width) {
 				col = 0;
-				height++;
+				row++;
 			}
 		}
 
@@ -171,7 +170,7 @@ main (int argc, char **argv)
 		int idx = 0;
 		for(int x = 0; x < 32; x++){
 			for(int y = 0; y < 24; y++){
-				flat[idx++] = mlx90640To[32 * (23-y) + x];
+				flat[idx++] = mlx90640To[32 * y + x];
 			}
 		}
 		xmit (flat, 32, 24);
