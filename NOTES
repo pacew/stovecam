@@ -1,2 +1,5 @@
+apt-get install libsdl-pango-dev
+
+
 ~/elixir_mlx90640/src/
 https://gist.github.com/JamesDunne/9b7fbedb74c22ccc833059623f47beb7

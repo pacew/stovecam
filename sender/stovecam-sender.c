@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "stovecam.h"
+#include "../stovecam.h"
 
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"

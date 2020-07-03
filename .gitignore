@@ -1,5 +1,5 @@
 *~
 *.o
-stovecam-sender
-stovecam-sdl
+?
 stovecam-txt
+sdl

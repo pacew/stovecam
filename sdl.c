@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 
 #include <SDL2/SDL.h>
+#include <SDL_Pango.h>
 
 #include "stovecam.h"
 
@@ -151,7 +152,7 @@ ir_step (void)
 SDL_Window *window;
 SDL_Surface *surface;
 
-#define PIXEL_MULT 24
+#define PIXEL_MULT 32
 
 #define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
 #define SCREEN_HEIGHT (IR_HEIGHT * PIXEL_MULT)

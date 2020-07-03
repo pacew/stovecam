@@ -1,24 +1,11 @@
-CPPFLAGS = -g -Wall -I.
-CFLAGS = -g -Wall -I.
+CFLAGS = -g -Wall -I. `pkg-config --cflags sdl2 SDL_Pango`
+LIBS = `pkg-config --libs sdl2 SDL_Pango`
 
-all: stovecam-sdl stovecam-txt
+all: sdl
 
-STOVECAM_SENDER_OBJS = stovecam-sender.o MLX90640_API.o \
-	MLX90640_LINUX_I2C_Driver.o
-stovecam-sender: $(STOVECAM_SENDER_OBJS)
-	$(CC) $(CFLAGS) -o stovecam-sender $(STOVECAM_SENDER_OBJS) -li2c -lm
-
-stovecam-sdl: stovecam-sdl.o
-	$(CC) $(CFLAGS) -o stovecam-sdl stovecam-sdl.o -lSDL2 -lm
-
-stovecam-txt: stovecam-txt.o
-	$(CC) $(CFLAGS) -o stovecam-txt stovecam-txt.o
-
-install-service: stovecam-sender stovecam.service
-	sudo cp stovecam.service /etc/systemd/system/
-	sudo systemctl enable stovecam
-	sudo systemctl daemon-reload
+sdl: sdl.o
+	$(CC) $(CFLAGS) -o sdl sdl.o $(LIBS) -lm
 
 clean:
-	rm -f *.o stovecam-sender stovecam-sdl stovecam-txt
+	rm -f *.o sdl
 
