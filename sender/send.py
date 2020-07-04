@@ -39,7 +39,7 @@ def sext(val, sign):
 SCALEALPHA = 0.000001
 
 
-def extract_params():
+def extract_easy_params():
     params['kVdd'] = sext((eedata[0x33] >> 8) & 0xff, 0x80) * 32
     params['vdd25'] = ((eedata[0x33] & 0xff) - 256) * 32 - 8192
 
@@ -97,6 +97,7 @@ def extract_params():
     kvScale = (eedata[0x38] >> 8) & 0xf
     params['cpKv'] = val / pow(2, kvScale)
     
+def extract_alpha_params():
     accRemScale = eedata[0x20] & 0xf
     accColumnScale = (eedata[0x20] >> 4) & 0xf
     accRowScale = (eedata[0x20] >> 8) & 0xf
@@ -130,7 +131,8 @@ def extract_params():
                     + (accRow[i] << accRowScale) 
                     + (accColumn[j] << accColumnScale))
             val /= pow(2, alphaScale)
-            val -= params['tgc'] * (cpAlpha[0] + cpAlpha[1])/2
+            val -= (params['tgc'] 
+                    * (params['cpAlpha'][0] + params['cpAlpha'][1])/2)
 
             alphaTemp[p] = SCALEALPHA / val
 
@@ -150,6 +152,101 @@ def extract_params():
 #    params['alpha'] = alpha
     params['alphaScale'] = alphaScale
 
+def extract_offset_params():
+    occRemScale = eedata[0x10] & 0xf
+    occColumnScale = (eedata[0x10] >> 4) & 0xf
+    occRowScale = (eedata[0x10] >> 8) & 0xf
+    offsetRef = sext(eedata[0x11], 0x8000)
+
+    occRow = dict()
+    for i in range(6):
+        p = i * 4
+        occRow[p + 0] = sext(eedata[0x12 + i] & 0xf, 8)
+        occRow[p + 1] = sext((eedata[0x12 + i] >> 4) & 0xf, 8)
+        occRow[p + 2] = sext((eedata[0x12 + i] >> 8) & 0xf, 8)
+        occRow[p + 3] = sext((eedata[0x12 + i] >> 12) & 0xf, 8)
+        
+    occColumn = dict()
+    for i in range(8):
+        p = i * 4
+        occColumn[p + 0] = sext(eedata[0x18 + i] & 0xf, 8)
+        occColumn[p + 1] = sext((eedata[0x18 + i] >> 4) & 0xf, 8)
+        occColumn[p + 2] = sext((eedata[0x18 + i] >> 8) & 0xf, 8)
+        occColumn[p + 3] = sext((eedata[0x18 + i] >> 12) & 0xf, 8)
+        
+    offset = dict()
+    for i in range(24):
+        for j in range(24):
+            p = 32 * i + j
+            val = sext((eedata[0x40 + p] >> 10) & 0x3f, 32)
+            val *= 1 << occRemScale
+
+            val += (offsetRef 
+                    + (occRow[i] << occRowScale) 
+                    + (occColumn[j] << occColumnScale))
+
+            offset[p] = val
+
+#    params['offset'] = offset
+            
+def extract_kta_pixel_params():
+    KtaRC = dict()
+    
+    KtaRoCo = sext((eedata[0x36] >> 8) & 0xff, 128)
+    KtaRC[0] = KtaRoCo
+
+    KtaReCo = sext(eedata[0x36] & 0xff, 128)
+    KtaRC[2] = KtaReCo
+    
+    KtaRoCe = sext((eedata[0x37] >> 8) & 0xff, 128)
+    KtaRC[1] = KtaRoCe
+
+    KtaReCe = sext(eedata[0x37] & 0xff, 128)
+    KtaRC[3] = KtaReCe
+
+    ktaScale1 = ((eedata[0x38] >> 4) & 0xf) + 8
+    ktaScale2 = eedata[0x38] & 0xf
+
+    kta_factor1 = pow(2, ktaScale1)
+    
+    ktaTemp = dict()
+    for i in range(24):
+        for j in range(32):
+            p = 32 * i + j
+            split = 2*(p//32 - (p//64)*2) + p%2;
+
+            val = sext((eedata[0x40 + p] >> 1) & 7, 4)
+            val *= 1 << ktaScale2
+            val += KtaRC[split]
+            ktaTemp[p] = val / kta_factor1
+
+    maxval = abs(ktaTemp[0])
+    for _, val in ktaTemp.items():
+        if abs(val) > maxval:
+            maxval = abs(val)
+    
+    ktaScale1 = 0
+    while maxval < 63.4:
+        maxval *= 2
+        ktaScale1 += 1
+        
+    factor = pow(2, ktaScale1)
+    kta = dict()
+    for i in range(24*32):
+        temp = ktaTemp[i] * factor
+        if temp < 0:
+            kta[i] = math.floor(temp - 0.5)
+        else:
+            kta[i] = math.floor(temp + 0.5)
+    
+#    params['kta'] = kta
+    params['ktaScale'] = ktaScale1
+
+def extract_params():
+    extract_easy_params()
+    extract_alpha_params()
+    extract_offset_params()
+    extract_kta_pixel_params()
 
 eedata = i2c_read (0x2400, 832)
 extract_params()
