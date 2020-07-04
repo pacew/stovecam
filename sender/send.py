@@ -2,6 +2,7 @@
 
 import sys
 import math
+import time
 
 from smbus2 import SMBus, i2c_msg
 
@@ -10,7 +11,9 @@ bus = SMBus(1)
 cam_addr = 0x33
 
 def i2c_read(addr, count):
-    wr = i2c_msg.write(cam_addr, [(addr >> 8) & 0xff, addr & 0xff])
+    wr = i2c_msg.write(cam_addr, 
+                       [(addr >> 8) & 0xff, 
+                        addr & 0xff])
     rd = i2c_msg.read(cam_addr, count * 2)
     bus.i2c_rdwr(wr, rd)
     ret = list()
@@ -24,6 +27,13 @@ def i2c_read(addr, count):
             hilo = True
     return ret
             
+def i2c_write(addr, val):
+    wr = i2c_msg.write(cam_addr, [(addr >> 8) & 0xff, 
+                                  addr & 0xff,
+                                  (val >> 8) & 0xff,
+                                  val & 0xff])
+    bus.i2c_rdwr(wr)
+
 params = dict()
 
 eedata = None
@@ -336,11 +346,6 @@ def extract_deviating_pixels():
 
         pixCnt += 1
 
-    print(brokenPixCnt)
-    print(outlierPixCnt)
-    print(brokenPixels)
-    print(outlierPixels)
-
     if brokenPixCnt > 4:
         warn = -3
     elif outlierPixCnt > 4:
@@ -382,9 +387,58 @@ def extract_params():
     extract_cilc_params()
     return extract_deviating_pixels()
 
-eedata = i2c_read (0x2400, 832)
-extract_params()
-print(params)
+def set_modes():
+    refresh_rate = 2
+
+    ret = i2c_read(0x800d, 1)
+    val = ret[0]
+    val &= ~(7 << 7)
+    val |= refresh_rate << 7
+    val |= 0x1000 # chess mode
+    i2c_write(0x800d, val)
+
+    ret = i2c_read(0x800d, 1)
+    print(f"mode = {ret[0]:x}")
+
+
+def get_frame():
+    vals = i2c_read(0x8000, 1)
+    status_register = vals[0]
+    if (status_register & 8) == 0:
+        return None
+
+    i2c_write(0x8000, 0x30)
+
+    frame = i2c_read(0x400, 24*32)
+    aux_data = i2c_read(0x700, 64)
+
+    frame += aux_data
+
+    vals = i2c_read(0x800d, 1)
+    frame += vals # frame[832]
+    frame += [status_register & 1] # frame[833]
+    return frame
+
+    
+
+def sender():
+    global eedata
+    eedata = i2c_read(0x2400, 832)
+    extract_params()
+
+    set_modes()
+
+    frame = get_frame()
+    if frame is None:
+        print("no frame")
+        sys.exit(0)
+    print(f"{frame[0]:x}")
+    print(f"{frame[1]:x}")
+    print(f"{frame[2]:x}")
+    print(f"{frame[3]:x}")
+
+sender()
+
 
 
 
