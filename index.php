@@ -19,4 +19,8 @@ $wss_url = sprintf ("wss://%s:%d", $wss_host, $wss_port);
 
 $extra_scripts .= sprintf ("var wss_url = '%s';\n", h($wss_url));
 
+$body .= "<canvas id='temp_canvas' width='320' height='240'></canvas>\n";
+
+$body .= "<p>world</p>\n";
+
 pfinish ();
