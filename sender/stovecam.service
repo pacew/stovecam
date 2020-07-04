@@ -3,7 +3,7 @@ Description=stovecam
 
 [Service]
 Type=simple
-ExecStart=/home/pace/stovecam/stovecam-sender -q
+ExecStart=/home/pace/stovecam/sender/stovecam-sender -q
 Restart=always
 RestartSec=30
 
