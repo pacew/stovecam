@@ -15,7 +15,7 @@ from smbus2 import SMBus, i2c_msg
 cur_framenum = 0
 cur_img_for_web = [0] * 768
 
-wss_port = 10555
+wss_port = 18801
 
 
 bus = SMBus(1)
@@ -657,7 +657,7 @@ def run():
     ssl_context.load_cert_chain("/etc/apache2/wildcard.pacew.org.crt",
                                 "/etc/apache2/wildcard.pacew.org.key")
     wss_server = websockets.serve(wss_client, 
-                                    host="pi1.pacew.org", port=wss_port,
+                                    host="k.pacew.org", port=wss_port,
                                     ssl=ssl_context)
 
     print(f"wss port {wss_port}")
