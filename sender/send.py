@@ -5,17 +5,16 @@ import math
 import time
 import socket
 import struct
+import ssl
+import websockets
+import asyncio
+import json
 
 from smbus2 import SMBus, i2c_msg
 
 cur_framenum = 0
 
-try:
-    with open("../cfg.json") as inf:
-        cfg = json.loads(inf.read())
-        wss_port = cfg['wss_port']
-except:
-    wss_port = 10555
+wss_port = 10555
 
 
 bus = SMBus(1)
@@ -633,7 +632,7 @@ async def send_images(websocket):
                 last_framenum = cur_framenum
                 msg = dict()
                 msg['framenum'] = cur_framenum
-                await sock.send(json.dumps(msg))
+                await websocket.send(json.dumps(msg))
             await asyncio.sleep(.1)
     except websockets.exceptions.ConnectionClosed as err:
         print("client closed", remote)
@@ -651,7 +650,7 @@ def run():
     ssl_context.load_cert_chain("/etc/apache2/wildcard.pacew.org.crt",
                                 "/etc/apache2/wildcard.pacew.org.key")
     wss_server = websockets.serve(wss_client, 
-                                    host=None, port=wss_port,
+                                    host="pi1.pacew.org", port=wss_port,
                                     ssl=ssl_context)
 
     print(f"wss port {wss_port}")
@@ -665,14 +664,17 @@ def main():
     cam_setup()
     net_setup()
     
-    print("ready")
-    while True:
-        img = cam_get()
-        if img is None:
-            time.sleep(.1)
-        else:
-            print(img[0], img[1])
-            net_send(img)
+    if False:
+        print("ready")
+        while True:
+            img = cam_get()
+            if img is None:
+                time.sleep(.1)
+            else:
+                print(img[0], img[1])
+                net_send(img)
+    else:
+        run()
 
 
 main()
