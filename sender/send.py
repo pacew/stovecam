@@ -78,13 +78,13 @@ def extract_easy_params():
 
     KsToScale = 1.0 * (1 << ((eedata[0x3f] & 0xf) + 8))
 
-    ksto = dict()
-    ksto[0] = sext(eedata[0x3d] & 0xff, 0x80) / KsToScale
-    ksto[1] = sext((eedata[0x3d] >> 8) & 0xff, 0x80) / KsToScale
-    ksto[2] = sext(eedata[0x3e] & 0xff, 0x80) / KsToScale
-    ksto[3] = sext((eedata[0x3e] >> 8) & 0xff, 0x80) / KsToScale
-    ksto[4] = -0.0002
-    params['ksto'] = ksto
+    ksTo = dict()
+    ksTo[0] = sext(eedata[0x3d] & 0xff, 0x80) / KsToScale
+    ksTo[1] = sext((eedata[0x3d] >> 8) & 0xff, 0x80) / KsToScale
+    ksTo[2] = sext(eedata[0x3e] & 0xff, 0x80) / KsToScale
+    ksTo[3] = sext((eedata[0x3e] >> 8) & 0xff, 0x80) / KsToScale
+    ksTo[4] = -0.0002
+    params['ksTo'] = ksTo
 
     cpOffset = dict()
     cpOffset[0] = sext(eedata[0x3a] & 0x3ff, 512)
@@ -186,7 +186,7 @@ def extract_offset_params():
         
     offset = dict()
     for i in range(24):
-        for j in range(24):
+        for j in range(32):
             p = 32 * i + j
             val = sext((eedata[0x40 + p] >> 10) & 0x3f, 32)
             val *= 1 << occRemScale
@@ -419,12 +419,157 @@ def get_frame():
     frame += [status_register & 1] # frame[833]
     return frame
 
+def get_Vdd(frame):
+    vdd_raw = sext(frame[810], 0x8000)
+
+    resolutionRam = (frame[832] >> 10) & 3
+    resolutionCorrection = (pow(2, params['resolutionEE']) /
+                            pow(2, resolutionRam))
+    vdd = ((resolutionCorrection * vdd_raw - params['vdd25']) 
+           / params['kVdd']) + 3.3
+    return vdd
+
+def get_Ta(frame):
+    vdd = get_Vdd(frame)
+
+    ptat = sext(frame[800], 0x8000)
+    ptatArt_raw = sext(frame[768], 0x8000)
+    ptatArt = (ptat / (ptat * params['alphaPTAT'] + ptatArt_raw)) * pow(2, 18)
+
+    ta_raw = ptatArt / (1 + params['KvPTAT'] * (vdd - 3.3)) - params['vPTAT25']
+
+    ta = ta_raw / params['KtPTAT'] + 25
+
+    return ta
     
+def calculate_To(frame, tr, img):
+    subPage = frame[833]
+    vdd = get_Vdd(frame)
+    ta = get_Ta(frame)
+
+    ta4 = (ta + 273.15);
+    ta4 = ta4 * ta4;
+    ta4 = ta4 * ta4;
+
+    tr4 = (tr + 273.15);
+    tr4 = tr4 * tr4;
+    tr4 = tr4 * tr4;
+
+    emissivity = 1
+    taTr = tr4 - (tr4-ta4)/emissivity;
+
+    ktaScale = pow(2, params['ktaScale'])
+    kvScale = pow(2, params['kvScale'])
+    alphaScale = pow(2, params['alphaScale'])
+    
+    alphaCorrR = dict()
+    alphaCorrR[0] = 1 / (1 + params['ksTo'][0] * 40)
+    alphaCorrR[1] = 1
+    alphaCorrR[2] = 1 + params['ksTo'][1] * params['ct'][2]
+    alphaCorrR[3] = alphaCorrR[2] * (1 + 
+                                     params['ksTo'][2] * (params['ct'][3] - 
+                                                          params['ct'][2]))
+    
+    # gain calculation
+    gain = params['gainEE'] / sext(frame[778], 0x8000)
+    print(gain)
+    
+    # To calculation
+    mode = (frame[832] >> 5) & 0x80
+    
+    irDataCP = dict()
+    irDataCP[0] = sext(frame[776], 0x8000) * gain
+    irDataCP[1] = sext(frame[808], 0x8000) * gain
+
+    irDataCP[0] -= (params['cpOffset'][0] 
+                    * (1 + params['cpKta'] * (ta - 25)) 
+                    * (1 + params['cpKv'] * (vdd - 3.3)))
+
+    if mode == params['calibrationModeEE']:
+        irDataCP[1] -= (params['cpOffset'][1]
+                        * (1 + params['cpKta'] * (ta - 25)) 
+                        * (1 + params['cpKv'] * (vdd - 3.3)))
+    else:
+        irDataCP[1] -= ((params['cpOffset'][1] + params['ilChessC'][0]) 
+                        * (1 + params['cpKta'] * (ta - 25)) 
+                        * (1 + params['cpKv'] * (vdd - 3.3)))
+
+    for pixelNumber in range(768):
+        ilPattern = pixelNumber // 32 - (pixelNumber // 64) * 2 
+        chessPattern = ilPattern ^ (pixelNumber - (pixelNumber//2)*2)
+
+        conversionPattern = ((pixelNumber + 2) // 4 
+                             - (pixelNumber + 3) // 4 
+                             + (pixelNumber + 1) // 4 
+                             - pixelNumber // 4) * (1 - 2 * ilPattern)
+        
+        if mode == 0:
+          pattern = ilPattern; 
+        else:
+          pattern = chessPattern
+
+        if pattern == frame[833]:
+            irData = sext(frame[pixelNumber], 0x8000) * gain
+            
+            kta = params['kta'][pixelNumber]/ktaScale
+            kv = params['kv'][pixelNumber]/kvScale
+
+            irData -= (params['offset'][pixelNumber]
+                       * (1 + kta*(ta - 25))
+                       * (1 + kv*(vdd - 3.3)))
+            
+            if mode != params['calibrationModeEE']:
+                irData += (params['ilChessC'][2] * (2 * ilPattern - 1)
+                           - (params['ilChessC'][1] * conversionPattern))
+    
+            irData -= params['tgc'] * irDataCP[subPage]
+            irData /= emissivity
+            
+            alphaCompensated = (SCALEALPHA
+                                * alphaScale
+                                / params['alpha'][pixelNumber]
+                                * (1 + params['KsTa'] * (ta - 25)))
+                        
+            factor = (pow(alphaCompensated, 3) 
+                      * (irData + alphaCompensated * taTr))
+            Sx = pow(factor, 0.25) * params['ksTo'][1]
+            
+            To_prelim = pow(irData 
+                            / (alphaCompensated 
+                               * (1 - params['ksTo'][1] * 273.15)
+                               + Sx) 
+                            + taTr, 
+                            0.25) - 273.15
+
+            if isinstance(To_prelim, complex):
+                To_prelim = 0
+
+            if To_prelim < params['ct'][1]:
+                To_range = 0;
+            elif To_prelim < params['ct'][2]:
+                To_range = 1;            
+            elif To_prelim < params['ct'][3]:
+                To_range = 2;            
+            else:
+                To_range = 3;            
+            
+            To = pow(irData 
+                     / (alphaCompensated 
+                        * alphaCorrR[To_range] 
+                        * (1 + params['ksTo'][To_range]
+                           * (To_prelim - params['ct'][To_range])))
+                     + taTr, 
+                     0.25) - 273.15
+
+            img[pixelNumber] = To
+
 
 def sender():
     global eedata
     eedata = i2c_read(0x2400, 832)
     extract_params()
+
+    print(params['ct'])
 
     set_modes()
 
@@ -432,10 +577,11 @@ def sender():
     if frame is None:
         print("no frame")
         sys.exit(0)
-    print(f"{frame[0]:x}")
-    print(f"{frame[1]:x}")
-    print(f"{frame[2]:x}")
-    print(f"{frame[3]:x}")
+
+    ta = get_Ta(frame)
+    img = [0]*768
+    calculate_To (frame, ta, img)
+    print(img)
 
 sender()
 
