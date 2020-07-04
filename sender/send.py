@@ -1,5 +1,8 @@
 #! /usr/bin/env python3
 
+import sys
+import math
+
 from smbus2 import SMBus, i2c_msg
 
 bus = SMBus(1)
@@ -8,7 +11,7 @@ cam_addr = 0x33
 
 def i2c_read(addr, count):
     wr = i2c_msg.write(cam_addr, [(addr >> 8) & 0xff, addr & 0xff])
-    rd = i2c_msg.read(cam_addr, count)
+    rd = i2c_msg.read(cam_addr, count * 2)
     bus.i2c_rdwr(wr, rd)
     ret = list()
     hilo = True
@@ -33,6 +36,7 @@ def sext(val, sign):
 
 
 
+SCALEALPHA = 0.000001
 
 
 def extract_params():
@@ -97,7 +101,7 @@ def extract_params():
     accColumnScale = (eedata[0x20] >> 4) & 0xf
     accRowScale = (eedata[0x20] >> 8) & 0xf
     # different from above!
-    alpha_scale = ((eedata[0x20] >> 12) & 0xf) + 30
+    alphaScale = ((eedata[0x20] >> 12) & 0xf) + 30
     alphaRef = eedata[0x21]
 
     accRow = dict()
@@ -114,9 +118,38 @@ def extract_params():
         accColumn[i*4 + 2] = sext((eedata[0x28 + i] >> 8) & 0xf, 8)
         accColumn[i*4 + 3] = sext((eedata[0x28 + i] >> 12) & 0xf, 8)
         
+    alphaTemp = dict()
+    for i in range(24):
+        for j in range(32):
+            p = 32 * i + j
+
+            val = sext((eedata[0x40 + p] >> 4) & 0x3f, 32)
+            val *= pow(2, accRemScale)
+            
+            val += (alphaRef 
+                    + (accRow[i] << accRowScale) 
+                    + (accColumn[j] << accColumnScale))
+            val /= pow(2, alphaScale)
+            val -= params['tgc'] * (cpAlpha[0] + cpAlpha[1])/2
+
+            alphaTemp[p] = SCALEALPHA / val
+
+    temp = max(alphaTemp.values())
     
-    
-    
+    # reused again
+    alphaScale = 0
+    while temp < 32767.4:
+        temp *= 2
+        alphaScale += 1
+
+    alpha_factor = pow(2, alphaScale)
+    alpha = dict()
+    for i in range(24*32):
+        alpha[i] = math.floor(alphaTemp[i] * alpha_factor + 0.5)
+
+#    params['alpha'] = alpha
+    params['alphaScale'] = alphaScale
+
 
 eedata = i2c_read (0x2400, 832)
 extract_params()
