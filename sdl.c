@@ -17,7 +17,7 @@
 #define IR_WIDTH 32
 #define IR_HEIGHT 24
 
-#define PIXEL_MULT 20
+#define PIXEL_MULT 30
 #define GRAPH_HEIGHT 200
 #define SCREEN_WIDTH (IR_WIDTH * PIXEL_MULT)
 #define SCREEN_HEIGHT ((IR_HEIGHT * PIXEL_MULT) + GRAPH_HEIGHT)
@@ -47,11 +47,16 @@ usage (void)
 
 struct hdr {
 	uint32_t magic;
+
 	uint16_t width;
 	uint16_t height;
+
 	uint16_t start_row;
 	uint16_t start_col;
+
 	uint16_t npix;
+	uint16_t pad;
+	
 	float data[0];
 };
 
@@ -157,7 +162,13 @@ ir_step (void)
 		}
 
 		for (int pnum = 0; pnum < npix; pnum++) {
-			float pix = u.hdr.data[pnum];
+			union {
+				uint32_t i;
+				float f;
+			} u2;
+			memcpy (&u2.i, &u.hdr.data[pnum], 4);
+			u2.i = ntohl (u2.i);
+			float pix = u2.f;
 			raw_temps[row * IR_WIDTH + (IR_WIDTH - col - 1)] = pix;
 			col++;
 			if (col >= IR_WIDTH) {
