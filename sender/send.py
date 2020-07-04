@@ -314,70 +314,21 @@ def extract_cilc_params():
 
     params['ilChessC'] = ilChessC
 
-def CheckAdjacentPixels(pix1, pix2):
-    pixPosDif = pix1 - pix2
-    if -34 < pixPosDif and pixPosDif < -30:
-        return -6
-
-    if -2 < pixPosDif and pixPosDif < 2:
-        return -6
-    
-    if 30 < pixPosDif and pixPosDif < 34:
-        return -6
-
-    return 0
-
 def extract_deviating_pixels():
     brokenPixels = dict()
     outlierPixels = dict()
     
-    for pixCnt in range(5):
-        brokenPixels[pixCnt] = 0xffff
-        outlierPixels[pixCnt] = 0xffff
+    brokenPixels = list()
+    outlierPixels = list()
+    
+    for pixnum in range(24*32):
+        if eedata[0x40 + pixnum] == 0:
+            brokenPixels.append(pixnum)
+        elif (eedata[0x40 + pixnum] & 1) != 0:
+            outlierPixels.append(pixnum)
 
-    brokenPixCnt = 0
-    outlierPixCnt = 0
-    pixCnt = 0
-    while pixCnt < 24*32 and brokenPixCnt < 5 and outlierPixCnt < 5:
-        if eedata[0x40 + pixCnt] == 0:
-            brokenPixels[brokenPixCnt] = pixCnt
-            brokenPixCnt += 1
-        elif (eedata[0x40 + pixCnt] & 1) != 0:
-            outlinerPixels[outlierPixCnt] = pixCnt
-            outlierPixCnt += 1
-
-        pixCnt += 1
-
-    if brokenPixCnt > 4:
-        warn = -3
-    elif outlierPixCnt > 4:
-        warn = -4
-    elif brokenPixCnt + outlierPixCnt > 4:
-        warn = -5
-    else:
-        for pixCnt in range(brokenPixCnt):
-            for i in range(pixCnt+1, brokenPixCnt):
-                warn = CheckAdjacentPixels(brokenPixels[pixCnt],
-                                           brokenPixels[i])
-                if warn != 0:
-                    return warn
-                
-        for pixCnt in range(outlierPixCnt):
-            for i in range(pixCnt+1, outlierPixCnt):
-                warn = CheckAdjacentPixels(outlierPixels[pixCnt],
-                                           outlierPixels[i])
-                if warn != 0:
-                    return warn
-
-        for pixCnt in range(brokenPixCnt):
-            for i in range(outlierPixCnt):
-                warn = CheckAdjacentPixels(brokenPixels[pixCnt],
-                                           outlierPixels[i])
-                if warn != 0:
-                    return warn
-
-    return warn
-                
+    params['brokenPixels'] = brokenPixels
+    params['outlierPixels'] = outlierPixels
 
 
 def extract_params():
@@ -562,9 +513,39 @@ def calculate_To(frame, tr, img):
                      0.25) - 273.15
 
             if isinstance(To, complex):
-                To = 0.0
+                To = 25.0
 
             img[pixelNumber] = To
+
+class pixavg:
+    def __init__(self):
+        self.acc = 0
+        self.count = 0
+
+    def addpix(self, img, row, col):
+        if (0 <= row and row < 32
+            and 0 <= col and col < 24):
+            self.acc += img[row * 32 + col]
+            self.count += 1
+            
+    def val(self):
+        if self.count == 0:
+            return 0
+        return self.acc / self.count
+
+def bad_pixels_correction(img, pixels):
+    for pixnum in pixels:
+        row = pixnum // 32
+        col = pixnum % 32
+
+        avg = pixavg()
+        avg.addpix(img, row - 1, col - 1)
+        avg.addpix(img, row - 1, col + 1)
+        avg.addpix(img, row + 1, col - 1)
+        avg.addpix(img, row + 1, col + 1)
+        
+        img[row * 32 + col ] = avg.val()
+                
 
 def cam_setup():
     global eedata
@@ -581,6 +562,8 @@ def cam_get():
 
     ta = get_Ta(frame)
     calculate_To (frame, ta, img)
+    bad_pixels_correction(img, params['brokenPixels'])
+    bad_pixels_correction(img, params['outlierPixels'])
     return img
 
 maddr = ("239.134.242.175", 63704)
@@ -594,8 +577,6 @@ def net_send(img):
     max_in_pkt = (1400 - 14) // 4
 
     togo = 24*32
-
-    print(img[0], img[1], img[2])
 
     offset = 0
     while togo > 0:
@@ -611,7 +592,6 @@ def net_send(img):
         npix = thistime
         pad = 0
 
-        print(thistime)
         pkt = struct.pack(f"!IHHHHHH{thistime}f", magic, 
                           width, height, 
                           start_row, start_col, 
@@ -619,7 +599,6 @@ def net_send(img):
                           *img[offset:offset+thistime])
 
         ret = udp_sock.sendto (pkt, maddr)
-        print(thistime, len(pkt), ret)
 
         togo -= thistime
         offset += thistime
@@ -629,6 +608,7 @@ def main():
     cam_setup()
     net_setup()
     
+    print("ready")
     while True:
         img = cam_get()
         if img is None:
