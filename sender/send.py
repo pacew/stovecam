@@ -242,11 +242,67 @@ def extract_kta_pixel_params():
 #    params['kta'] = kta
     params['ktaScale'] = ktaScale1
 
+def extract_kv_pixel_params():
+    KvT = dict()
+    
+    KvRoCo = sext((eedata[0x34] >> 12) & 0xf, 8)
+    KvT[0] = KvRoCo
+    
+    KvReCo = sext((eedata[0x34] >> 8) & 0xf, 8)
+    KvT[2] = KvReCo
+
+    KvRoCe = sext((eedata[0x34] >> 4) & 0xf, 8)
+    KvT[1] = KvRoCe
+
+    KvReCe = sext(eedata[0x34] & 0xf, 8)
+    KvT[3] = KvReCe
+
+    kvScale = (eedata[0x38] >> 8) & 0xf
+
+    factor = pow(2, kvScale)
+    
+    kvTemp = dict()
+    for i in range(24):
+        for j in range(32):
+            p = 32 * i + j
+            split = 2*(p//32 - (p//64)*2) + p%2
+            val = KvT[split]
+            kvTemp[p] = val / factor
+            
+    maxval = abs(kvTemp[0])
+    for _, val in kvTemp.items():
+        if abs(val) > maxval:
+            maxval = abs(val)
+
+    kvScale = 0
+    while maxval < 63.4:
+        maxval *= 2
+        kvScale += 1
+
+    factor = pow(2, kvScale)
+    kv = dict()
+    for i in range(768):
+        temp = kvTemp[i] * factor
+        if temp < 0:
+            kv[i] = math.floor(temp - 0.5)
+        else:
+            kv[i] = math.floor(temp + 0.5)
+
+#    params['kv'] = kv
+    params['kvScale'] = kvScale
+            
+    print(kv[0])
+    print(kv[1])
+    print(kv[2])
+    print(kv[3])
+
+
 def extract_params():
     extract_easy_params()
     extract_alpha_params()
     extract_offset_params()
     extract_kta_pixel_params()
+    extract_kv_pixel_params()
 
 eedata = i2c_read (0x2400, 832)
 extract_params()
