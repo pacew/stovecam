@@ -46,6 +46,8 @@ function pstart () {
 	}
 }
 
+$extra_scripts = "";
+
 function pfinish () {
     $pg = "";
 
@@ -75,6 +77,11 @@ function pfinish () {
     global $cfg;
     $pg .= "<script>\n";
     $pg .= sprintf ("var cfg = %s;\n", json_encode ($cfg));
+    global $options;
+    $pg .= sprintf ("var options = %s;\n", json_encode ($options));
+
+    global $extra_scripts;
+    $pg .= $extra_scripts;
     $pg .= "</script>\n";
 
 
@@ -99,7 +106,7 @@ function pfinish () {
                     get_cache_defeater ());
 
     global $username;
-    if ($username) {
+    if (0 && $username) {
         global $pstart_timestamp;
         $secs = microtime(TRUE) - $pstart_timestamp;
         $pg .= sprintf ("<div id='generation_time'>%.0f msecs</div>\n",
