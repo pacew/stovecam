@@ -291,10 +291,86 @@ def extract_kv_pixel_params():
 #    params['kv'] = kv
     params['kvScale'] = kvScale
             
-    print(kv[0])
-    print(kv[1])
-    print(kv[2])
-    print(kv[3])
+def extract_cilc_params():
+    params['calibrationModeEE'] = ((eedata[0xa] >> 4) & 0x80) ^ 0x80
+
+    ilChessC = dict()
+    
+    ilChessC[0] = sext(eedata[0x35] & 0x3f, 32) / 16.0
+    ilChessC[1] = sext((eedata[0x35] >> 6) & 0x1f, 16) / 2.0
+    ilChessC[2] = sext((eedata[0x35] >> 11) & 0x1f, 16) / 8.0
+
+    params['ilChessC'] = ilChessC
+
+def CheckAdjacentPixels(pix1, pix2):
+    pixPosDif = pix1 - pix2
+    if -34 < pixPosDif and pixPosDif < -30:
+        return -6
+
+    if -2 < pixPosDif and pixPosDif < 2:
+        return -6
+    
+    if 30 < pixPosDif and pixPosDif < 34:
+        return -6
+
+    return 0
+
+def extract_deviating_pixels():
+    brokenPixels = dict()
+    outlierPixels = dict()
+    
+    for pixCnt in range(5):
+        brokenPixels[pixCnt] = 0xffff
+        outlierPixels[pixCnt] = 0xffff
+
+    brokenPixCnt = 0
+    outlierPixCnt = 0
+    pixCnt = 0
+    while pixCnt < 24*32 and brokenPixCnt < 5 and outlierPixCnt < 5:
+        if eedata[0x40 + pixCnt] == 0:
+            brokenPixels[brokenPixCnt] = pixCnt
+            brokenPixCnt += 1
+        elif (eedata[0x40 + pixCnt] & 1) != 0:
+            outlinerPixels[outlierPixCnt] = pixCnt
+            outlierPixCnt += 1
+
+        pixCnt += 1
+
+    print(brokenPixCnt)
+    print(outlierPixCnt)
+    print(brokenPixels)
+    print(outlierPixels)
+
+    if brokenPixCnt > 4:
+        warn = -3
+    elif outlierPixCnt > 4:
+        warn = -4
+    elif brokenPixCnt + outlierPixCnt > 4:
+        warn = -5
+    else:
+        for pixCnt in range(brokenPixCnt):
+            for i in range(pixCnt+1, brokenPixCnt):
+                warn = CheckAdjacentPixels(brokenPixels[pixCnt],
+                                           brokenPixels[i])
+                if warn != 0:
+                    return warn
+                
+        for pixCnt in range(outlierPixCnt):
+            for i in range(pixCnt+1, outlierPixCnt):
+                warn = CheckAdjacentPixels(outlierPixels[pixCnt],
+                                           outlierPixels[i])
+                if warn != 0:
+                    return warn
+
+        for pixCnt in range(brokenPixCnt):
+            for i in range(outlierPixCnt):
+                warn = CheckAdjacentPixels(brokenPixels[pixCnt],
+                                           outlierPixels[i])
+                if warn != 0:
+                    return warn
+
+    return warn
+                
 
 
 def extract_params():
@@ -303,6 +379,8 @@ def extract_params():
     extract_offset_params()
     extract_kta_pixel_params()
     extract_kv_pixel_params()
+    extract_cilc_params()
+    return extract_deviating_pixels()
 
 eedata = i2c_read (0x2400, 832)
 extract_params()
