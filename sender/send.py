@@ -657,7 +657,7 @@ def run():
     ssl_context.load_cert_chain("/etc/apache2/wildcard.pacew.org.crt",
                                 "/etc/apache2/wildcard.pacew.org.key")
     wss_server = websockets.serve(wss_client, 
-                                    host="k.pacew.org", port=wss_port,
+                                    port=wss_port,
                                     ssl=ssl_context)
 
     print(f"wss port {wss_port}")

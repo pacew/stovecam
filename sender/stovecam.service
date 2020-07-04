@@ -2,8 +2,9 @@
 Description=stovecam
 
 [Service]
+User=pace
 Type=simple
-ExecStart=/home/pace/stovecam/sender/stovecam-sender -q
+ExecStart=/home/pace/stovecam/sender/send.py
 Restart=always
 RestartSec=30
 
