@@ -149,7 +149,7 @@ def extract_alpha_params():
     for i in range(24*32):
         alpha[i] = math.floor(alphaTemp[i] * alpha_factor + 0.5)
 
-#    params['alpha'] = alpha
+    params['alpha'] = alpha
     params['alphaScale'] = alphaScale
 
 def extract_offset_params():
@@ -187,7 +187,7 @@ def extract_offset_params():
 
             offset[p] = val
 
-#    params['offset'] = offset
+    params['offset'] = offset
             
 def extract_kta_pixel_params():
     KtaRC = dict()
@@ -239,7 +239,7 @@ def extract_kta_pixel_params():
         else:
             kta[i] = math.floor(temp + 0.5)
     
-#    params['kta'] = kta
+    params['kta'] = kta
     params['ktaScale'] = ktaScale1
 
 def extract_kv_pixel_params():
@@ -288,7 +288,7 @@ def extract_kv_pixel_params():
         else:
             kv[i] = math.floor(temp + 0.5)
 
-#    params['kv'] = kv
+    params['kv'] = kv
     params['kvScale'] = kvScale
             
 def extract_cilc_params():
