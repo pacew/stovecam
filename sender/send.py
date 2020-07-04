@@ -3,6 +3,8 @@
 import sys
 import math
 import time
+import socket
+import struct
 
 from smbus2 import SMBus, i2c_msg
 
@@ -398,7 +400,6 @@ def set_modes():
     i2c_write(0x800d, val)
 
     ret = i2c_read(0x800d, 1)
-    print(f"mode = {ret[0]:x}")
 
 
 def get_frame():
@@ -472,7 +473,6 @@ def calculate_To(frame, tr, img):
     
     # gain calculation
     gain = params['gainEE'] / sext(frame[778], 0x8000)
-    print(gain)
     
     # To calculation
     mode = (frame[832] >> 5) & 0x80
@@ -561,30 +561,82 @@ def calculate_To(frame, tr, img):
                      + taTr, 
                      0.25) - 273.15
 
+            if isinstance(To, complex):
+                To = 0.0
+
             img[pixelNumber] = To
 
-
-def sender():
+def cam_setup():
     global eedata
     eedata = i2c_read(0x2400, 832)
     extract_params()
-
-    print(params['ct'])
-
     set_modes()
+    global img
+    img = [0.0]*768
 
+def cam_get():
     frame = get_frame()
     if frame is None:
-        print("no frame")
-        sys.exit(0)
+        return None
 
     ta = get_Ta(frame)
-    img = [0]*768
     calculate_To (frame, ta, img)
-    print(img)
+    return img
 
-sender()
+maddr = ("239.134.242.175", 63704)
+IRMAGIC = 0x20200630
+
+def net_setup():
+    global udp_sock
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+def net_send(img):
+    max_in_pkt = (1400 - 14) // 4
+
+    togo = 24*32
+
+    print(img[0], img[1], img[2])
+
+    offset = 0
+    while togo > 0:
+        thistime = togo
+        if thistime > max_in_pkt:
+            thistime = max_in_pkt
+
+        magic = IRMAGIC
+        width = 32
+        height = 24
+        start_row = offset // 32
+        start_col = offset % 32
+        npix = thistime
+        pad = 0
+
+        print(thistime)
+        pkt = struct.pack(f"!IHHHHHH{thistime}f", magic, 
+                          width, height, 
+                          start_row, start_col, 
+                          npix, pad,
+                          *img[offset:offset+thistime])
+
+        ret = udp_sock.sendto (pkt, maddr)
+        print(thistime, len(pkt), ret)
+
+        togo -= thistime
+        offset += thistime
+        
+
+def main():
+    cam_setup()
+    net_setup()
+    
+    while True:
+        img = cam_get()
+        if img is None:
+            time.sleep(.1)
+        else:
+            net_send(img)
 
 
+main()
 
 
