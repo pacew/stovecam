@@ -1,3 +1,5 @@
+TMP.*
+cfg.json
 *~
 *.o
 ?
