@@ -8,6 +8,16 @@ import struct
 
 from smbus2 import SMBus, i2c_msg
 
+cur_framenum = 0
+
+try:
+    with open("../cfg.json") as inf:
+        cfg = json.loads(inf.read())
+        wss_port = cfg['wss_port']
+except:
+    wss_port = 10555
+
+
 bus = SMBus(1)
 
 cam_addr = 0x33
@@ -564,6 +574,8 @@ def cam_get():
     calculate_To (frame, ta, img)
     bad_pixels_correction(img, params['brokenPixels'])
     bad_pixels_correction(img, params['outlierPixels'])
+    global cur_framenum
+    cur_framenum += 1
     return img
 
 maddr = ("239.134.242.175", 63704)
@@ -604,6 +616,51 @@ def net_send(img):
         offset += thistime
         
 
+async def collect_images():
+    while True:
+        img = cam_get()
+        if img is not None:
+            net_send(img)
+
+        await asyncio.sleep(0.1)
+
+async def send_images(websocket):
+    remote = websocket.remote_address
+    last_framenum = 0
+    try:
+        while True:
+            if cur_framenum != last_framenum:
+                last_framenum = cur_framenum
+                msg = dict()
+                msg['framenum'] = cur_framenum
+                await sock.send(json.dumps(msg))
+            await asyncio.sleep(.1)
+    except websockets.exceptions.ConnectionClosed as err:
+        print("client closed", remote)
+
+
+async def wss_client(websocket, path):
+    remote = websocket.remote_address
+    print("new client", remote)
+
+    await send_images(websocket)
+
+
+def run():
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain("/etc/apache2/wildcard.pacew.org.crt",
+                                "/etc/apache2/wildcard.pacew.org.key")
+    wss_server = websockets.serve(wss_client, 
+                                    host=None, port=wss_port,
+                                    ssl=ssl_context)
+
+    print(f"wss port {wss_port}")
+
+    asyncio.get_event_loop().run_until_complete(wss_server)
+    asyncio.get_event_loop().run_until_complete(collect_images())
+    asyncio.get_event_loop().run_forever()
+
+
 def main():
     cam_setup()
     net_setup()
@@ -614,6 +671,7 @@ def main():
         if img is None:
             time.sleep(.1)
         else:
+            print(img[0], img[1])
             net_send(img)
 
 
