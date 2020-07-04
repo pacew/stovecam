@@ -13,6 +13,7 @@ import json
 from smbus2 import SMBus, i2c_msg
 
 cur_framenum = 0
+cur_img_for_web = [0] * 768
 
 wss_port = 10555
 
@@ -575,6 +576,11 @@ def cam_get():
     bad_pixels_correction(img, params['outlierPixels'])
     global cur_framenum
     cur_framenum += 1
+
+    global cur_img_for_web
+    for pixnum in range(768):
+        cur_img_for_web[pixnum] = math.floor(img[pixnum] * 9 / 5 + 32)
+
     return img
 
 maddr = ("239.134.242.175", 63704)
@@ -632,6 +638,7 @@ async def send_images(websocket):
                 last_framenum = cur_framenum
                 msg = dict()
                 msg['framenum'] = cur_framenum
+                msg['img'] = cur_img_for_web
                 await websocket.send(json.dumps(msg))
             await asyncio.sleep(.1)
     except websockets.exceptions.ConnectionClosed as err:
