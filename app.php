@@ -91,9 +91,6 @@ function pfinish () {
 
     $pg .= "<div class='content'>\n";
 
-    $pg .= sprintf ("<h1 class='banner_title'>%s</h1>\n",
-                    $title_html);
-
     echo ($pg);
     $pg = "";
 
