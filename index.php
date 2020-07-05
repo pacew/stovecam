@@ -30,6 +30,8 @@ $body .= "<div>"
       ." <span id='monitor_temp'>temp</span>"
       ."</div>\n";
 
+$body .= "<canvas id='graph_canvas' width='640' height='200'>"
+      ."</canvas>\n";
 
 
 pfinish ();

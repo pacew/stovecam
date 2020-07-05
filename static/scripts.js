@@ -32,7 +32,7 @@ function lscale_clamp (val, from_left, from_right, to_left, to_right) {
 function line(x1, y1, x2, y2) {
   main_ctx.beginPath();
   main_ctx.moveTo(x1, y1)
-  main_ctx.lineTo(x2, y2,)
+  main_ctx.lineTo(x2, y2)
   main_ctx.stroke();
 }
 
@@ -95,12 +95,72 @@ function do_monitor_temp() {
 
 }
 
+var graph_canvas;
+var graph_ctx;
+
+function temp_to_y(t) {
+  var t0 = 70;
+  var t1 = 500;
+  var y0 = graph_canvas.height;
+  var y1 = 0;
+  
+  return (lscale_clamp (t, t0, t1, y0, y1));
+}
+
+function draw_graph () {
+
+  graph_ctx.fillStyle = "#555";
+  graph_ctx.fillRect(0, 0, graph_canvas.width, graph_canvas.height);
+  
+  for (t = 100; t < 500; t += 100) {
+    var y = temp_to_y (t);
+    graph_ctx.strokeStyle = '#000';
+    graph_ctx.lineWidth = 1;
+    graph_ctx.beginPath();
+    graph_ctx.moveTo (0, y);
+    graph_ctx.lineTo (graph_canvas.width, y);
+    graph_ctx.stroke ();
+  }
+  
+
+  graph_ctx.strokeStyle = "white";
+  graph_ctx.lineWidth = 3;
+  graph_ctx.beginPath();
+  graph_ctx.moveTo(0, temp_to_y (temp_hist[0]));
+  for (var i = 1; i < temp_hist.length; i++) {
+    var x = lscale_clamp (i, 0, temp_hist.length, 0, graph_canvas.width);
+    var y = temp_to_y (temp_hist[i]);
+    graph_ctx.lineTo (x, y);
+  }
+  graph_ctx.stroke();
+
+  
+
+
+}
+
+
 function redraw () {
   display_temps();
   do_monitor_temp ();
+  draw_graph ();
 }
   
+var last_data_secs;
+var count = 0;
 
+var temp_hist;
+
+function collect_data () {
+  var now = Date.now() / 1000.0;
+  var dt = now - last_data_secs;
+  if (dt < .5)
+    return;
+
+  for (var i = 1; i < temp_hist.length; i++)
+    temp_hist[i-1] = temp_hist[i]
+  temp_hist[temp_hist.length - 1] = get_temp_pixels (monitor_x, monitor_y);
+}
 
 
 
@@ -110,6 +170,9 @@ function handle_msg (ev) {
   var msg = JSON.parse(ev.data);
 
   temps = msg.img
+
+  collect_data ();
+
   redraw ()
 
   last_msg_secs = Date.now() / 1000.0;
@@ -155,11 +218,20 @@ function do_mousedown(ev) {
 }
 
 function setup() {
+  last_data_secs = Date.now() / 1000;
+
   main_canvas = document.getElementById("temp_canvas");
   main_ctx = main_canvas.getContext("2d");
   
   main_canvas.addEventListener('mousemove', do_mousemove);
   main_canvas.addEventListener('mousedown', do_mousedown);
+
+  graph_canvas = document.getElementById("graph_canvas");
+  graph_ctx = graph_canvas.getContext("2d");
+
+  temp_hist = []
+  for (var i = 0; i < 300; i++)
+    temp_hist.push(90)
 }
 
 
